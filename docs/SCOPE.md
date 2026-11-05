@@ -1,147 +1,110 @@
-# Fairfee — Scope Document
+# Verified Payouts
 
-**Status:** Draft v1 · **Hackathon:** Build What's Next with PayPal and AI · **Deadline:** confirm on Devpost (Nov 12, 2026)
+Payout controls for businesses using the PayPal Payouts API. Payouts go only to PayPal accounts the payee has verified, account changes require proof of continuity, and every batch is checked before it is sent.
 
-## 1. Problem
+## Problem
 
-When an order crosses borders, the import charges (duties, import taxes, carrier fees) a customer pays at checkout are only an estimate. The actual charges often come in higher or lower. Today, small merchants rarely settle that difference: customers silently overpay, merchants silently absorb shortfalls, and customers are sometimes charged twice (at checkout and again at the door).
+Payout diversion: an attacker impersonates a payee ("new PayPal email, pay me here"), an insider adds a fake payee, or amounts are altered. Claimed payouts are hard to recover. Business email compromise caused $3.05B in reported US losses in 2025 (FBI IC3); figures specific to PayPal payouts are not public, so the extent on this channel is an assumption to validate with customers.
 
-## 2. Solution
+## Customers
 
-Fairfee is a duty and fee reconciliation engine for merchants who sell internationally through PayPal. It reads the actual charge documents the merchant already has (carrier PDFs, broker statements, customer receipt photos), matches them to PayPal orders, and settles each difference through PayPal, with a human approving every money movement.
+Businesses paying 20+ people through the standard PayPal Payouts API: creator and affiliate programs, freelance marketplaces, agencies, research panels.
 
-- **Customer overpaid** → partial PayPal refund
-- **Customer underpaid** → absorb (default for small amounts) or send a PayPal invoice, within caps
-- **Customer charged twice** → refund the duplicate charge
+## Positioning
 
-## 3. Users
+PayPal's enterprise payout platform (Hyperwallet) includes payee verification, KYC/AML screening and tax reporting. Businesses on the standard Payouts API do not get that layer. Verified Payouts adds payout controls for them without a platform migration. Businesses needing full identity and tax compliance should use Hyperwallet.
 
-| User | What they get |
-|---|---|
-| Small and mid-sized cross-border merchants (primary) | Hours of manual reconciliation saved, fewer absorbed losses, fewer disputes |
-| Their customers (indirect) | Automatic refunds when they overpaid, clear explanations |
+## Roles
 
-## 4. Core flow
+- **Operator:** invites payees, uploads batches
+- **Approver:** reviews holds and approves; cannot approve payees they invited or changed
+- **Payee:** verifies once with Log in with PayPal; uses the portal for any account change
 
-1. **Orders** exist in PayPal, with the estimated import charge recorded as a separate amount.
-2. **Upload:** the merchant drops in documents in any format (PDF, image, spreadsheet, pasted email).
-3. **Extract (AI):** read each document; pull tracking numbers, charge lines, amounts, currency.
-4. **Classify (AI):** label each charge line (duty, import tax, carrier fee, storage fee, correction) and who should bear it.
-5. **Match (AI):** link each charge to a PayPal order using tracking number, name, address, date and amount, with a confidence score.
-6. **Compute (code):** difference = actual customer-borne charges − estimate paid.
-7. **Policy (code):** apply merchant rules and caps; skip unsafe cases.
-8. **Approve (human):** review table with every proposed action, totals and flags.
-9. **Execute (code):** PayPal refunds and invoices, each with an idempotency key.
-10. **Audit:** append-only record of every step.
+## Flow
 
-## 5. AI vs. code (design principle)
+1. Operator invites payee and attaches an invoice or contract.
+2. Payee logs in with PayPal → account ID, verified status, name and email stored.
+3. AI finds the payee's name in the document and checks it against the verified name.
+4. Operator uploads batch → checks run → items ready or held with a reason.
+5. Approver approves → Payouts API sends to verified account IDs.
+6. Webhooks and status sync update each item; every action is audited.
 
-**AI reads and judges. Code calculates and moves money.** The AI never calls a money-moving PayPal endpoint.
+## Account changes
 
-| AI does | Code does |
-|---|---|
-| Extract data from any document layout or language | All arithmetic and currency math |
-| Classify charge lines | Policy rules and caps |
-| Fuzzy-match documents to orders, with confidence | Every PayPal API call |
-| Check customer-submitted receipts for inconsistencies | Idempotency, dry-run, audit log |
-| Write a clear explanation for each customer | Schema validation of all AI output |
+Changes are only made through the payee portal, never from a message.
 
-## 6. Scope
+- **Payee can access the old account:** logs in with the old account, then the new one. Change applies after approval.
+- **Payee lost access:** 72-hour cooling-off period, notice sent to the old PayPal email and contact email, approver confirms by phone using contact details on file, first payout to the new account capped.
 
-**In scope (must work at submission)**
-- Seed 20–30 sandbox orders with import charges across a few routes
-- Upload mixed documents: at least two carrier PDF formats and one receipt photo
-- AI extraction, classification and matching, validated against a schema
-- Policy engine with configurable rules
-- Approval screen (table, totals, flags)
-- Executor: real sandbox partial refunds and invoices
-- Audit log
-- Hosted demo, README with run instructions, demo video under 3 minutes
+## Checks
 
-**Stretch (only if core is done by day 5)**
-- Pass-through of a duty or fee refund received from a carrier
-- Route insights (which origin→destination routes have the biggest gaps)
-- Customer messages in the customer's language
+| Check | Source | Action |
+|---|---|---|
+| Payee not verified | Rule | Block |
+| Account differs from verified | Rule | Block |
+| Duplicate line | Rule | Hold |
+| First payment > $300 | Rule | Hold, second approver |
+| Amount > 3x payee median | Rule | Hold |
+| Two payees, one account | Rule | Hold |
+| Verified identity matches a staff member | Rule | Hold |
+| Name in document doesn't match verified name | AI | Hold |
 
-**Out of scope**
-- Calculating duty rates
-- Integrations with real carriers or stores
-- Advice on which goods are allowed in which country
-- Login, multiple merchants, billing
+Limits are configurable.
 
-## 7. Default policy rules
+## Role of AI
 
-| Rule | Default |
-|---|---|
-| Absorb shortfalls under | $5 |
-| Max refund per order | Never more than the import charge paid |
-| Max invoice per order | $25 or 15% of order total, whichever is lower |
-| Open dispute on order | Skip and flag |
-| Match confidence below | 0.8 → flag for manual review, no action |
-| Order past PayPal refund time limit | Flag; no automatic refund |
-| Batch approval | Always required |
+Reads onboarding documents (invoices, contracts) to find the payee's name and match it to the PayPal-verified name, where string matching fails: "Bob Smith" vs "Robert J. Smith", "Studio Kōhaku LLC" listing owner Haruto Tanaka, Cyrillic vs Latin spellings. Also reviews the reason and documents a payee gives for an account change, and writes the explanation for every hold.
 
-## 8. Data model
+AI only flags and explains; it never approves or sends. If unavailable, items needing AI checks are held.
 
-| Object | Key fields |
-|---|---|
-| Order | PayPal order ID, capture ID, buyer, route (origin → destination), estimated import charge, currency, tracking number |
-| Document | ID, type (carrier invoice, broker statement, receipt photo, email), file, uploaded at |
-| ChargeLine | document ID, tracking number, charge type, amount, currency, customer-borne (yes/no) |
-| Match | charge line ID, order ID, confidence, reasoning |
-| PlanItem | order ID, action (refund / invoice / absorb / skip / review), amount, explanation, policy notes |
-| Approval | batch ID, approved items, approved at |
-| AuditEntry | timestamp, step, input, output, PayPal response |
+## Rollout for existing payees
 
-## 9. PayPal APIs
+1. Import existing payees in monitor mode: paid as before, checks run and report only.
+2. Invite them to verify (one login, about a minute).
+3. After the deadline, unverified payees are held.
 
-| API | Use |
-|---|---|
-| Orders v2 | Create test orders with import charge as a separate amount; read details |
-| Payments v2 (captures, refunds) | Capture payments; partial refunds |
-| Invoicing v2 | Create and send shortfall invoices |
-| Disputes v1 | Check for open disputes before acting |
+## PayPal APIs
 
-## 10. Code structure
+- Identity (Log in with PayPal): account ID, verified status, email, name
+- Payouts: create batch, batch/item status, cancel unclaimed item
+- Webhooks: payout item events, signature verification
 
-| Module | Responsibility |
-|---|---|
-| `paypal/` | Single client wrapping all PayPal calls (swappable for PayPal MCP later) |
-| `ingest/` | Accept uploads; pass files to the AI extractor |
-| `ai/` | Extraction, classification, matching, explanations; schema-validated output |
-| `policy/` | Pure functions applying rules; unit tested |
-| `executor/` | The only code that moves money; dry-run mode; idempotency keys |
-| `audit/` | Append-only log |
-| `app/` | UI: upload, review, approve, results |
+## Payout item states
 
-**Stack:** Next.js + TypeScript, Zod for schemas, AI model with PDF and image input (to be chosen), hosted on Render.
+`draft → held | ready → approved → sent → completed | unclaimed | returned | failed | blocked | cancelled`
 
-## 11. Demo script (under 3 minutes)
+## Guarantees
 
-| Time | What's shown |
-|---|---|
-| 0:00–0:25 | The problem: estimated vs. actual import charges; customers overpay, merchants absorb |
-| 0:25–1:15 | Drop in two carrier PDFs and a customer receipt photo; AI extracts, classifies, matches |
-| 1:15–1:50 | Review table: refunds, an invoice, absorbed amounts, flagged items, explanations |
-| 1:50–2:30 | Approve; real sandbox refunds and invoice appear in the buyer accounts |
-| 2:30–3:00 | Audit log, design principle (AI reads, code moves money), what's next |
+- No duplicate sends (idempotent batch IDs)
+- No unverified or unapproved item is sent
+- Webhooks are signature-verified; missed events caught by status sync
+- Audit log is append-only
 
-## 12. Definition of done
+## Data handling
 
-- [ ] Sandbox orders seeded with import charges
-- [ ] Mixed documents extracted and matched correctly in the demo set
-- [ ] Policy rules applied and unit tested
-- [ ] Approval required before any money moves
-- [ ] Real sandbox refunds and invoices executed
-- [ ] Audit log viewable
-- [ ] Deployed and publicly reachable
-- [ ] README: description, AI tools and how they're used, setup and run instructions, sample data labeled as samples
-- [ ] MIT license visible
-- [ ] Public YouTube demo under 3 minutes
-- [ ] Devpost submission complete
+Stored: PayPal account ID, verified flag, verified name, email, verification time. Access tokens are discarded after the profile is fetched. Payees consent on the PayPal login screen. Data is deleted on request or when a payee is removed.
 
-## 13. Known limitations
+## Success measures
 
-- Carrier documents and receipts in the demo are sample files created for testing
-- PayPal limits how long after payment a refund can be issued; older orders are flagged, not refunded
-- Invoicing customers for shortfalls is sensitive; caps are low and absorbing is the default
+- Under 5% of items held in a steady-state batch
+- Under 20% of holds released as false alarms
+- Holds resolved within 1 business day
+
+## Limitations
+
+- Verification proves control of a PayPal account, not that the payee did the work.
+- Two colluding insiders (inviter and approver) can bypass controls.
+- Payees need a PayPal account.
+
+## Launch prerequisites
+
+- Live Payouts enabled on the business's PayPal account
+- Use of Log in with PayPal for payee verification confirmed with PayPal
+
+## Stack
+
+Next.js, TypeScript, Postgres, Zod. AI provider behind an interface. Hosted on Render.
+
+## Not in v1
+
+SSO and team management, inbox integrations, bank payouts, tax forms, multi-tenant billing.
