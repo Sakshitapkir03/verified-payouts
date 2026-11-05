@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: verified-payouts
+    runtime: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: PAYPAL_ENVIRONMENT
+        value: SANDBOX
+      # Secrets and deployment-specific values: set in the Render dashboard.
+      # sync: false keeps them out of this file.
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_REDIRECT_URI
+        sync: false

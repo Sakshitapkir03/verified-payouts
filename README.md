@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Verified Payouts
 
-## Getting Started
+Payout controls for businesses using the PayPal Payouts API. See [docs/SCOPE.md](docs/SCOPE.md).
 
-First, run the development server:
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env   # then fill in your sandbox credentials
+npm run dev -- -H 127.0.0.1
+npm test
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://127.0.0.1:3000/verify. Use `127.0.0.1`, not `localhost`, so the browser host matches the PayPal redirect URI.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Required | Secret | Description |
+|---|---|---|---|
+| `PAYPAL_CLIENT_ID` | Yes | No* | Client ID of your PayPal REST app |
+| `PAYPAL_CLIENT_SECRET` | Yes | **Yes** | Secret of your PayPal REST app |
+| `PAYPAL_ENVIRONMENT` | Yes | No | `SANDBOX` or `LIVE` |
+| `PAYPAL_REDIRECT_URI` | In production | No | Log in with PayPal return URL. Defaults to `http://127.0.0.1:3000/api/auth/paypal/callback` |
 
-## Learn More
+\* Not secret, but tied to your PayPal app, so it is set per environment rather than committed.
 
-To learn more about Next.js, take a look at the following resources:
+Never commit real values. `.env.example` lists the names only.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy on Render
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`render.yaml` defines a Node web service:
 
-## Deploy on Vercel
+- Build: `npm ci && npm run build`
+- Start: `npm start` (Next.js listens on Render's `PORT`)
+- Health check: `GET /api/health` returns `200 {"status":"ok"}`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+To deploy:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. In Render, create a **Blueprint** from this repository.
+2. When prompted, enter `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_REDIRECT_URI`. These are marked `sync: false`, so they are stored only in Render. `PAYPAL_ENVIRONMENT` is set to `SANDBOX` in `render.yaml`.
+3. Set `PAYPAL_REDIRECT_URI` to `https://<your-service>.onrender.com/api/auth/paypal/callback`.
+4. In the PayPal developer dashboard, add that exact URL as a return URL for Log in with PayPal on the app.
