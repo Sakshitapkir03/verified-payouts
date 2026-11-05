@@ -2,6 +2,8 @@ services:
   - type: web
     name: verified-payouts
     runtime: node
+    # Without a plan, Render defaults new web services to a paid instance.
+    plan: free
     buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /api/health

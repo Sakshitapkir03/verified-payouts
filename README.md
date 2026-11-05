@@ -26,7 +26,7 @@ Open http://127.0.0.1:3000/verify. Use `127.0.0.1`, not `localhost`, so the brow
 
 ## Deploy on Render
 
-`render.yaml` defines a Node web service:
+`render.yaml` defines a Node web service on Render's free plan:
 
 - Build: `npm ci && npm run build`
 - Start: `npm start` (Next.js listens on Render's `PORT`)
