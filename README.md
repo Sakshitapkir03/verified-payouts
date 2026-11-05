@@ -15,16 +15,14 @@ Open http://127.0.0.1:3000/verify. Use `127.0.0.1`, not `localhost`, so the brow
 
 ## Environment variables
 
-| Variable | Required | Secret | Description |
+| Variable | Required | On Render | Description |
 |---|---|---|---|
-| `PAYPAL_CLIENT_ID` | Yes | No* | Client ID of your PayPal REST app |
-| `PAYPAL_CLIENT_SECRET` | Yes | **Yes** | Secret of your PayPal REST app |
-| `PAYPAL_ENVIRONMENT` | Yes | No | `SANDBOX` or `LIVE` |
-| `PAYPAL_REDIRECT_URI` | In production | No | Log in with PayPal return URL. Defaults to `http://127.0.0.1:3000/api/auth/paypal/callback` |
+| `PAYPAL_CLIENT_ID` | Yes | Secret, set in dashboard | Client ID of your PayPal REST app |
+| `PAYPAL_CLIENT_SECRET` | Yes | Secret, set in dashboard | Secret of your PayPal REST app |
+| `PAYPAL_REDIRECT_URI` | In production | Secret, set in dashboard | Log in with PayPal return URL. Defaults to `http://127.0.0.1:3000/api/auth/paypal/callback` |
+| `PAYPAL_ENVIRONMENT` | Yes | `SANDBOX` in `render.yaml` | `SANDBOX` or `LIVE` |
 
-\* Not secret, but tied to your PayPal app, so it is set per environment rather than committed.
-
-Never commit real values. `.env.example` lists the names only.
+`render.yaml` declares the three secrets with `sync: false` and no value, so they exist only in Render. Never commit real values. `.env.example` lists the names only.
 
 ## Deploy on Render
 
