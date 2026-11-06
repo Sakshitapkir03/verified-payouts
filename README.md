@@ -33,6 +33,10 @@ Open http://127.0.0.1:3000/verify. Use `127.0.0.1`, not `localhost`, so the brow
 | `PAYPAL_ENVIRONMENT` | Yes | `SANDBOX` in `render.yaml` | `SANDBOX` or `LIVE` |
 | `DATABASE_URL` | Yes | Secret, set in dashboard | Postgres connection string |
 | `TEST_DATABASE_URL` | For database tests | Not used | A separate, migrated Postgres database for `npm test` |
+| `CHECK_FIRST_PAYMENT_LIMIT_CENTS` | No | Optional | First payment above this is held for a second approver. Default `30000` ($300) |
+| `CHECK_MEDIAN_MULTIPLIER_PERCENT` | No | Optional | Hold amounts above this % of the payee's median. Default `300` (3x), minimum `100` |
+| `CHECK_MEDIAN_MIN_HISTORY` | No | Optional | Completed payments needed before the median rule applies. Default `3` |
+| `CHECK_DUPLICATE_WINDOW_DAYS` | No | Optional | Same payee and amount within this many days is a duplicate. Default `3`; `0` checks the batch only |
 
 `render.yaml` declares the four secrets with `sync: false` and no value, so they exist only in Render. Never commit real values. `.env.example` lists the names, with a local default where one is not secret.
 
@@ -55,6 +59,12 @@ createdb verified_payouts_test
 DATABASE_URL=postgresql://localhost:5432/verified_payouts_test npm run db:migrate
 TEST_DATABASE_URL=postgresql://localhost:5432/verified_payouts_test npm test
 ```
+
+## Payout items
+
+`src/lib/payouts/state-machine.ts` holds every allowed state transition and who may make it. Illegal transitions throw, and every transition writes an audit entry in the same transaction. A database trigger rejects state or hold changes made any other way. Approval goes through `approvePayoutItem`. It needs an approver who did not invite or change the payee, and two different approvers when a hold requires a second approver.
+
+The rule checks from the Checks table are pure functions in `src/lib/checks/rules.ts`. Limits come from the `CHECK_*` variables above. `loadCheckConfig` throws on an invalid value instead of silently loosening a check.
 
 ## Deploy on Render
 
