@@ -283,6 +283,17 @@ async function applyTransition(
   );
   await client.query("SELECT set_config('verified_payouts.state_machine', '', true)");
 
+  // New holds invalidate earlier approvals: those approvers haven't seen them.
+  let superseded = 0;
+  if (holds.length > 0) {
+    const result = await client.query(
+      `UPDATE approvals SET superseded_at = now()
+       WHERE payout_item_id = $1 AND superseded_at IS NULL`,
+      [req.itemId],
+    );
+    superseded = result.rowCount ?? 0;
+  }
+
   const isUser = req.actor.kind === "user" || req.actor.kind === "approval";
   await appendAuditEntry(client, {
     occurredAt: new Date(),
@@ -296,6 +307,7 @@ async function applyTransition(
       to: req.to,
       by: req.actor.kind,
       holds: holds.map((h) => h.code),
+      ...(superseded ? { approvals_superseded: superseded } : {}),
       ...(req.note ? { note: req.note } : {}),
     },
   });
@@ -328,8 +340,8 @@ export type ApprovalResult = {
 
 /**
  * Records one approver's approval. The item moves to approved once enough
- * different approvers have approved: two if any hold needs a second
- * approver, otherwise one.
+ * different approvers have approved since its holds last changed: two if
+ * any hold needs a second approver, otherwise one.
  */
 export async function approvePayoutItem(
   client: ClientBase,
@@ -367,7 +379,8 @@ export async function approvePayoutItem(
     const inserted = await client.query(
       `INSERT INTO approvals (approver_id, payout_item_id, decision, note)
        VALUES ($1, $2, 'approved', $3)
-       ON CONFLICT (payout_item_id, approver_id) WHERE payout_item_id IS NOT NULL
+       ON CONFLICT (payout_item_id, approver_id)
+         WHERE payout_item_id IS NOT NULL AND superseded_at IS NULL
        DO NOTHING`,
       [req.approverId, req.itemId, req.note ?? null],
     );
@@ -376,7 +389,7 @@ export async function approvePayoutItem(
     }
     const { rows } = await client.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM approvals
-       WHERE payout_item_id = $1 AND decision = 'approved'`,
+       WHERE payout_item_id = $1 AND decision = 'approved' AND superseded_at IS NULL`,
       [req.itemId],
     );
     const approvals = rows[0].n;

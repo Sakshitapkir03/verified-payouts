@@ -444,6 +444,57 @@ describe.skipIf(!TEST_DATABASE_URL)("payout item state machine in Postgres", () 
           .toEqual({ state: "approved", approvals: 2, required: 2 });
       }));
 
+    it("discards earlier approvals when a new hold is added", () =>
+      inRollback(async (client) => {
+        const f = await fixtures(client);
+        const id = await f.item();
+        await transitionPayoutItem(client, {
+          itemId: id, to: "held", actor: { kind: "checks" },
+          holds: [secondApproverHold], verificationId: f.verification,
+        });
+        await approvePayoutItem(client, { itemId: id, approverId: f.approverA });
+
+        const aiHold: HoldReason = { ...hold, code: "document_name_mismatch", source: "ai" };
+        await transitionPayoutItem(client, { itemId: id, to: "held", actor: { kind: "ai" }, holds: [aiHold] });
+        expect((await auditFor(client, id)).at(-1)?.details).toMatchObject({ approvals_superseded: 1 });
+
+        // B alone is not enough: A's approval predates the new hold.
+        await expect(approvePayoutItem(client, { itemId: id, approverId: f.approverB })).resolves
+          .toEqual({ state: "held", approvals: 1, required: 2 });
+        // A can approve again after seeing it.
+        await expect(approvePayoutItem(client, { itemId: id, approverId: f.approverA })).resolves
+          .toEqual({ state: "approved", approvals: 2, required: 2 });
+      }));
+
+    it("needs a fresh approval after an approved item is held again", () =>
+      inRollback(async (client) => {
+        const f = await fixtures(client);
+        const id = await readyItem(client, f);
+        await approvePayoutItem(client, { itemId: id, approverId: f.approverA });
+        await transitionPayoutItem(client, { itemId: id, to: "held", actor: { kind: "checks" }, holds: [hold] });
+
+        const { rows } = await client.query<{ superseded: boolean }>(
+          "SELECT superseded_at IS NOT NULL AS superseded FROM approvals WHERE payout_item_id = $1",
+          [id],
+        );
+        expect(rows).toEqual([{ superseded: true }]);
+        await expect(approvePayoutItem(client, { itemId: id, approverId: f.approverA })).resolves
+          .toEqual({ state: "approved", approvals: 1, required: 1 });
+      }));
+
+    it("keeps approvals when a transition adds no holds", () =>
+      inRollback(async (client) => {
+        const f = await fixtures(client);
+        const id = await readyItem(client, f);
+        await approvePayoutItem(client, { itemId: id, approverId: f.approverA });
+        await transitionPayoutItem(client, { itemId: id, to: "sent", actor: { kind: "executor" } });
+        const { rows } = await client.query(
+          "SELECT 1 FROM approvals WHERE payout_item_id = $1 AND superseded_at IS NULL",
+          [id],
+        );
+        expect(rows).toHaveLength(1);
+      }));
+
     it("rejects an approver who invited the payee, recording nothing", () =>
       inRollback(async (client) => {
         const f = await fixtures(client);
