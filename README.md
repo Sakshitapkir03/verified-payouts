@@ -64,7 +64,11 @@ TEST_DATABASE_URL=postgresql://localhost:5432/verified_payouts_test npm test
 
 `src/lib/payouts/state-machine.ts` holds every allowed state transition and who may make it. Illegal transitions throw, and every transition writes an audit entry in the same transaction. A database trigger rejects state or hold changes made any other way. Approval goes through `approvePayoutItem`. It needs an approver who did not invite or change the payee, and two different approvers when a hold requires a second approver.
 
+Holds are append-only: `held → held` adds reasons, and the database rejects removing, editing or reordering them, even from the state machine. Adding a hold marks earlier approvals superseded, so they no longer count.
+
 The rule checks from the Checks table are pure functions in `src/lib/checks/rules.ts`. Limits come from the `CHECK_*` variables above. `loadCheckConfig` throws on an invalid value instead of silently loosening a check.
+
+`checkBatch` in `src/lib/checks/pipeline.ts` checks a draft batch: it loads each payee's verification, history from earlier batches, shared-account data and the staff list, runs the rules, moves every item to ready, held or blocked through the state machine, and marks the batch `checked`. It runs in the caller's transaction, so a failure leaves the whole batch unchanged.
 
 ## Deploy on Render
 

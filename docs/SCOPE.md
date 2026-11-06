@@ -74,6 +74,17 @@ AI only flags and explains; it never approves or sends. If unavailable, items ne
 
 `draft → held | ready → approved → sent → completed | unclaimed | returned | failed | blocked | cancelled`
 
+Holds can be added to a held item but never removed; a held item is cleared only by approval. Adding a hold voids earlier approvals, so approvers see every reason before an item is approved.
+
+## Batch statuses
+
+`draft → checked → sent → closed`
+
+- **draft:** uploaded; every item is draft and nothing has been checked.
+- **checked:** the rule checks ran once over the whole batch; each item is ready, held or blocked. Approvers review and approve here. Later rechecks of single items go through the item states, not the batch.
+- **sent:** the executor submitted the approved items to the Payouts API under the batch's idempotent ID. Held, blocked and cancelled items are not sent.
+- **closed:** every sent item has a final result (completed, returned, failed or cancelled); nothing in the batch will change.
+
 ## Guarantees
 
 - No duplicate sends (idempotent batch IDs)
