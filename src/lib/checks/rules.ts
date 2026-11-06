@@ -82,17 +82,21 @@ function normalizeEmail(email: string): string {
 
 /** Block: the payee has no active Log in with PayPal verification. */
 export const payeeNotVerified: Rule = (_item, ctx) => {
-  if (!ctx.verification) {
-    return reason("payee_not_verified", "block", "Payee has not verified a PayPal account.");
-  }
-  if (!ctx.verification.verifiedAccount) {
-    return reason(
-      "payee_not_verified",
-      "block",
-      "PayPal reports the payee's account as not verified.",
-    );
-  }
-  return null;
+  if (ctx.verification) return null;
+  return reason("payee_not_verified", "block", "Payee has not verified a PayPal account.");
+};
+
+/**
+ * Hold: the payee proved control of the account with Log in with PayPal,
+ * but PayPal's own verified flag on the account is false.
+ */
+export const paypalAccountUnverified: Rule = (_item, ctx) => {
+  if (!ctx.verification || ctx.verification.verifiedAccount) return null;
+  return reason(
+    "paypal_account_unverified",
+    "hold",
+    "The payee logged in with this PayPal account, but PayPal marks the account itself as unverified. Confirm the payee before approving.",
+  );
 };
 
 /** Block: the batch names a receiver other than the verified account. */
@@ -226,6 +230,7 @@ export const matchesStaff: Rule = (_item, ctx) => {
 export const RULES: readonly Rule[] = [
   payeeNotVerified,
   accountDiffersFromVerified,
+  paypalAccountUnverified,
   duplicateLine,
   firstPaymentOverLimit,
   amountOverMedian,

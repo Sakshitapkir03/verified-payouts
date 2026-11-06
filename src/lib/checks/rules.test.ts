@@ -9,6 +9,7 @@ import {
   matchesStaff,
   normalizeName,
   payeeNotVerified,
+  paypalAccountUnverified,
   runChecks,
   sharedAccount,
   type CheckContext,
@@ -89,12 +90,43 @@ describe("payeeNotVerified", () => {
     });
   });
 
-  it("blocks when PayPal reports the account as unverified", () => {
+  it("does not block when only PayPal's verified flag is false", () => {
     const c = ctx();
     c.verification = { ...c.verification!, verifiedAccount: false };
-    expect(payeeNotVerified(item(), c, config)).toMatchObject({
-      action: "block",
-      explanation: "PayPal reports the payee's account as not verified.",
+    expect(payeeNotVerified(item(), c, config)).toBeNull();
+  });
+});
+
+describe("paypalAccountUnverified", () => {
+  const unverified = () => {
+    const c = ctx();
+    c.verification = { ...c.verification!, verifiedAccount: false };
+    return c;
+  };
+
+  it("passes an account PayPal marks as verified", () => {
+    expect(paypalAccountUnverified(item(), ctx(), config)).toBeNull();
+  });
+
+  it("holds, not blocks, an account PayPal marks as unverified", () => {
+    expect(paypalAccountUnverified(item(), unverified(), config)).toEqual({
+      code: "paypal_account_unverified",
+      action: "hold",
+      source: "rule",
+      requiresSecondApprover: false,
+      explanation:
+        "The payee logged in with this PayPal account, but PayPal marks the account itself as unverified. Confirm the payee before approving.",
+    });
+  });
+
+  it("leaves payees with no verification to the not-verified rule", () => {
+    expect(paypalAccountUnverified(item(), ctx({ verification: null }), config)).toBeNull();
+  });
+
+  it("makes runChecks hold the item rather than block it", () => {
+    expect(runChecks(item(), unverified(), config)).toEqual({
+      outcome: "held",
+      reasons: [expect.objectContaining({ code: "paypal_account_unverified" })],
     });
   });
 });

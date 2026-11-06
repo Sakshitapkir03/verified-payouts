@@ -41,6 +41,7 @@ Changes are only made through the payee portal, never from a message.
 | Check | Source | Action |
 |---|---|---|
 | Payee not verified | Rule | Block |
+| PayPal marks the verified account as unverified | Rule | Hold |
 | Account differs from verified | Rule | Block |
 | Duplicate line | Rule | Hold |
 | First payment > $300 | Rule | Hold, second approver |
