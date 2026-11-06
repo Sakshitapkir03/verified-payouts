@@ -64,8 +64,10 @@ export const TRANSITIONS: TransitionTable = {
     cancelled: ["user"],
   },
   // Approvers review holds and approve; nothing moves a held item back to
-  // ready, so a hold is only ever cleared by an approval.
+  // ready, so a hold is only ever cleared by an approval. held → held adds
+  // more hold reasons; reasons are never removed.
   held: {
+    held: ["checks", "ai"],
     approved: ["approval"],
     blocked: ["checks"],
     cancelled: ["user"],

@@ -21,6 +21,8 @@ const ALLOWED = new Set([
   "draft>held:ai",
   "draft>blocked:checks",
   "draft>cancelled:user",
+  "held>held:checks",
+  "held>held:ai",
   "held>approved:approval",
   "held>blocked:checks",
   "held>cancelled:user",
@@ -96,10 +98,9 @@ describe("transition table", () => {
     },
   );
 
-  it("never allows a state to transition to itself", () => {
-    for (const s of PAYOUT_ITEM_STATES) {
-      for (const actor of ACTORS) expect(canTransition(s, s, actor)).toBe(false);
-    }
+  it("allows only held to transition to itself, to add holds", () => {
+    const selfLoops = ALL_CASES.filter((c) => c.from === c.to && canTransition(c.from, c.to, c.actor));
+    expect(selfLoops.map((c) => c.key)).toEqual(["held>held:checks", "held>held:ai"]);
   });
 
   it("lets only the executor send", () => {

@@ -218,6 +218,34 @@ describe.skipIf(!TEST_DATABASE_URL)("payout item state machine in Postgres", () 
         expect(await stateOf(client, id)).toEqual({ state: "blocked", hold_reasons: [hold, block] });
       }));
 
+    it("adds holds to an item that is already held, with an audit entry", () =>
+      inRollback(async (client) => {
+        const f = await fixtures(client);
+        const id = await f.item();
+        await transitionPayoutItem(client, { itemId: id, to: "held", actor: { kind: "checks" }, holds: [hold] });
+        const aiHold: HoldReason = { ...hold, code: "document_name_mismatch", source: "ai" };
+        await expect(
+          transitionPayoutItem(client, { itemId: id, to: "held", actor: { kind: "ai" }, holds: [aiHold] }),
+        ).resolves.toEqual({ from: "held", to: "held" });
+
+        expect(await stateOf(client, id)).toEqual({ state: "held", hold_reasons: [hold, aiHold] });
+        expect((await auditFor(client, id)).at(-1)).toMatchObject({
+          action: "payout_item.transitioned",
+          actor_type: "system",
+          details: { from: "held", to: "held", by: "ai", holds: ["document_name_mismatch"] },
+        });
+      }));
+
+    it("needs at least one new reason to add holds", () =>
+      inRollback(async (client) => {
+        const f = await fixtures(client);
+        const id = await f.item();
+        await transitionPayoutItem(client, { itemId: id, to: "held", actor: { kind: "checks" }, holds: [hold] });
+        expect(
+          await codeOf(transitionPayoutItem(client, { itemId: id, to: "held", actor: { kind: "checks" }, holds: [] })),
+        ).toBe("invalid_holds");
+      }));
+
     it("refuses to approve through the generic transition", () =>
       inRollback(async (client) => {
         const f = await fixtures(client);
@@ -318,6 +346,39 @@ describe.skipIf(!TEST_DATABASE_URL)("payout item state machine in Postgres", () 
             ),
           ),
         ).toBe("42501");
+      }));
+
+    it.each([
+      ["removing a hold", "'[]'::jsonb"],
+      ["editing a hold", `jsonb_set(hold_reasons, '{0,explanation}', '"edited"')`],
+      ["reordering holds", "jsonb_build_array(hold_reasons->1, hold_reasons->0)"],
+      ["replacing a hold", `jsonb_build_array(hold_reasons->0, '{"code":"other"}'::jsonb)`],
+    ])("rejects %s even with the state machine flag on", (_label, expr) =>
+      inRollback(async (client) => {
+        const f = await fixtures(client);
+        const id = await f.item();
+        await transitionPayoutItem(client, {
+          itemId: id, to: "held", actor: { kind: "checks" },
+          holds: [hold, { ...hold, code: "shared_account" }],
+        });
+        await client.query("SELECT set_config('verified_payouts.state_machine', 'on', true)");
+        expect(
+          await sqlState(client.query(`UPDATE payout_items SET hold_reasons = ${expr} WHERE id = $1`, [id])),
+        ).toBe("42501");
+      }));
+
+    it("allows appending a hold with the state machine flag on", () =>
+      inRollback(async (client) => {
+        const f = await fixtures(client);
+        const id = await f.item();
+        await transitionPayoutItem(client, { itemId: id, to: "held", actor: { kind: "checks" }, holds: [hold] });
+        await client.query("SELECT set_config('verified_payouts.state_machine', 'on', true)");
+        await expect(
+          client.query(
+            `UPDATE payout_items SET hold_reasons = hold_reasons || '[{"code":"x"}]'::jsonb WHERE id = $1`,
+            [id],
+          ),
+        ).resolves.toBeDefined();
       }));
 
     it("allows updates that do not touch state or holds", () =>
