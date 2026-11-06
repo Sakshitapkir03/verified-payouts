@@ -116,7 +116,11 @@ export const accountDiffersFromVerified: Rule = (item, ctx) => {
   );
 };
 
-/** Hold: same payee and amount on another line of this batch, or paid recently. */
+/**
+ * Hold: same payee and amount on another line of this batch, or on an
+ * earlier item within the duplicate window. Lines in the same batch are
+ * always flagged; the window only applies to earlier batches.
+ */
 export const duplicateLine: Rule = (item, ctx, config) => {
   const lines = ctx.batch
     .filter(

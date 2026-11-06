@@ -258,6 +258,26 @@ describe("duplicateLine", () => {
     expect(duplicateLine(item(), dup, { ...config, duplicateWindowDays: 0 })).not.toBeNull();
   });
 
+  it.each([0, 1, 3, 365])(
+    "always flags a duplicate in the same batch, with a %i-day window",
+    (duplicateWindowDays) => {
+      const c = ctx({ batch: batch([1, PAYEE, 10000], [2, PAYEE, 10000]), history: [] });
+      expect(duplicateLine(item(), c, { ...config, duplicateWindowDays })?.explanation).toBe(
+        "Same payee and amount ($100.00) as line 2 of this batch.",
+      );
+    },
+  );
+
+  it("flags a batch duplicate even when the earlier payment is outside the window", () => {
+    const c = ctx({
+      batch: batch([1, PAYEE, 10000], [2, PAYEE, 10000]),
+      history: [completed(10000, 30)],
+    });
+    expect(duplicateLine(item(), c, config)?.explanation).toBe(
+      "Same payee and amount ($100.00) as line 2 of this batch.",
+    );
+  });
+
   it("uses singular wording for a 1-day window", () => {
     const c = ctx({ history: [completed(10000, 0)] });
     expect(duplicateLine(item(), c, { ...config, duplicateWindowDays: 1 })?.explanation).toBe(
