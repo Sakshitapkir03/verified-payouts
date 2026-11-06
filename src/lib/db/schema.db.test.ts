@@ -21,11 +21,16 @@ async function fixtures(client: Client) {
   return { userId, payeeId: payee.rows[0].id, batchId: batch.rows[0].id };
 }
 
-function insertItem(
+async function insertItem(
   client: Client,
   f: { batchId: string; payeeId: string },
   values: { amount?: unknown; currency?: string; state?: string; holds?: string } = {},
 ) {
+  if (values.state || values.holds) {
+    // These tests check CHECK constraints directly, so bypass the state
+    // machine guard for this transaction only.
+    await client.query("SELECT set_config('verified_payouts.state_machine', 'on', true)");
+  }
   return client.query(
     `INSERT INTO payout_items
        (batch_id, line_number, payee_id, amount_cents, currency, state, hold_reasons, sender_item_id)
