@@ -11,4 +11,10 @@ export default defineConfig({
       ),
     },
   },
+  test: {
+    // Database tests take table locks (ALTER TABLE) and the audit advisory
+    // lock inside their transactions; running files in parallel could
+    // deadlock them.
+    fileParallelism: false,
+  },
 });
