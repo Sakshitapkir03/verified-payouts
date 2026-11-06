@@ -32,7 +32,7 @@ function completed(amountCents: number, daysAgo = 30): HistoryItem {
 /** A verified payee with a normal payment history and a one-line batch. */
 function ctx(overrides: Partial<CheckContext> = {}): CheckContext {
   return {
-    payee: { id: PAYEE, monitorMode: false },
+    payee: { id: PAYEE },
     verification: {
       payerId: "PAYERID12345",
       verifiedAccount: true,
@@ -467,7 +467,7 @@ describe("matchesStaff", () => {
 
 describe("runChecks", () => {
   it("returns ready with no reasons for a clean item", () => {
-    expect(runChecks(item(), ctx(), config)).toEqual({ outcome: "ready", reasons: [], enforced: true });
+    expect(runChecks(item(), ctx(), config)).toEqual({ outcome: "ready", reasons: [] });
   });
 
   it("returns held when only holds apply", () => {
@@ -504,16 +504,6 @@ describe("runChecks", () => {
       "amount_over_median",
       "shared_account",
     ]);
-  });
-
-  it("reports but does not hold in monitor mode", () => {
-    const result = runChecks(
-      item(),
-      ctx({ payee: { id: PAYEE, monitorMode: true }, verification: null }),
-      config,
-    );
-    expect(result).toMatchObject({ outcome: "ready", enforced: false });
-    expect(result.reasons.map((r) => r.code)).toEqual(["payee_not_verified"]);
   });
 
   it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(

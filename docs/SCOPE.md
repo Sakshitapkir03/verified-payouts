@@ -59,9 +59,9 @@ AI only flags and explains; it never approves or sends. If unavailable, items ne
 
 ## Rollout for existing payees
 
-1. Import existing payees in monitor mode: paid as before, checks run and report only.
-2. Invite them to verify (one login, about a minute).
-3. After the deadline, unverified payees are held.
+1. Import existing payees.
+2. Invite them to verify (one login, about a minute) by a deadline.
+3. Items for payees who have not verified are blocked.
 
 ## PayPal APIs
 
@@ -108,3 +108,7 @@ Next.js, TypeScript, Postgres, Zod. AI provider behind an interface. Hosted on R
 ## Not in v1
 
 SSO and team management, inbox integrations, bank payouts, tax forms, multi-tenant billing.
+
+## Roadmap
+
+- **Monitor mode** for existing payees: imported payees are paid as before while checks run and only report, so a business can see what would be held before enforcing. Unverified payees are held after their verification deadline.

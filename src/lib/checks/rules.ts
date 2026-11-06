@@ -31,7 +31,7 @@ export type HistoryItem = {
 };
 
 export type CheckContext = {
-  payee: { id: string; monitorMode: boolean };
+  payee: { id: string };
   verification: ActiveVerification | null;
   /** The payee's items from earlier batches. */
   history: readonly HistoryItem[];
@@ -236,8 +236,6 @@ export const RULES: readonly Rule[] = [
 export type CheckResult = {
   outcome: "ready" | "held" | "blocked";
   reasons: HoldReason[];
-  /** False in monitor mode: reasons are reported but nothing is held. */
-  enforced: boolean;
 };
 
 export function runChecks(item: CheckItem, ctx: CheckContext, config: CheckConfig): CheckResult {
@@ -247,13 +245,10 @@ export function runChecks(item: CheckItem, ctx: CheckContext, config: CheckConfi
   const reasons = RULES.map((rule) => rule(item, ctx, config)).filter(
     (r): r is HoldReason => r !== null,
   );
-  if (ctx.payee.monitorMode) {
-    return { outcome: "ready", reasons, enforced: false };
-  }
   const outcome = reasons.some((r) => r.action === "block")
     ? "blocked"
     : reasons.length > 0
       ? "held"
       : "ready";
-  return { outcome, reasons, enforced: true };
+  return { outcome, reasons };
 }

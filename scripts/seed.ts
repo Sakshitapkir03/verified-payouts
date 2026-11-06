@@ -23,7 +23,6 @@ type SeedPayee = {
   displayName: string;
   contactEmail: string;
   contactPhone: string | null;
-  monitorMode: boolean;
   deadlineDays: number | null;
   // Sample Log in with PayPal result; payer ids are clearly fake.
   verification: {
@@ -41,7 +40,6 @@ const PAYEES: SeedPayee[] = [
     displayName: "Bob Smith",
     contactEmail: "bob@example.com",
     contactPhone: "+1 555 0101",
-    monitorMode: false,
     deadlineDays: null,
     verification: {
       id: "5eed0000-0000-4000-8000-000000000201",
@@ -56,17 +54,15 @@ const PAYEES: SeedPayee[] = [
     displayName: "Studio Kōhaku LLC",
     contactEmail: "hello@kohaku.example.com",
     contactPhone: null,
-    monitorMode: false,
     deadlineDays: 14,
     verification: null,
   },
   {
-    // Existing payee imported in monitor mode; verified in Cyrillic.
+    // Existing payee, verified with a Cyrillic name.
     id: "5eed0000-0000-4000-8000-000000000103",
     displayName: "Anna Petrova",
     contactEmail: "anna@example.com",
     contactPhone: "+1 555 0103",
-    monitorMode: true,
     deadlineDays: null,
     verification: {
       id: "5eed0000-0000-4000-8000-000000000203",
@@ -76,12 +72,11 @@ const PAYEES: SeedPayee[] = [
     },
   },
   {
-    // Existing payee in monitor mode who has not verified yet.
+    // Existing payee invited to verify by a deadline.
     id: "5eed0000-0000-4000-8000-000000000104",
     displayName: "Priya Raman",
     contactEmail: "priya@example.com",
     contactPhone: "+1 555 0104",
-    monitorMode: true,
     deadlineDays: 30,
     verification: null,
   },
@@ -121,11 +116,10 @@ async function seed(client: Client) {
       : new Date(now.getTime() + p.deadlineDays * DAY_MS);
     const { rowCount } = await client.query(
       `INSERT INTO payees (id, display_name, contact_email, contact_phone,
-         monitor_mode, verification_deadline, invited_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         verification_deadline, invited_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (id) DO NOTHING`,
-      [p.id, p.displayName, p.contactEmail, p.contactPhone, p.monitorMode,
-        deadline, OPERATOR_ID],
+      [p.id, p.displayName, p.contactEmail, p.contactPhone, deadline, OPERATOR_ID],
     );
     if (rowCount) {
       counts.payees++;
@@ -135,7 +129,7 @@ async function seed(client: Client) {
         action: "payee.invited",
         entityType: "payee",
         entityId: p.id,
-        details: { monitor_mode: p.monitorMode },
+        details: {},
       });
     }
 
